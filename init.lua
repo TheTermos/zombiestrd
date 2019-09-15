@@ -128,6 +128,27 @@ local function zombie_brain(self)
 	end
 end
 
+local function shark_brain(self)
+	if self.hp <= 0 then	
+		mobkit.clear_queue_high(self)
+		mobkit.hq_die(self)
+		return
+	end
+	
+	if mobkit.timer(self,1) then
+		if mobkit.timer(self,1) then
+			local prty = mobkit.get_queue_priority(self)
+			if prty < 20 then
+				local target = mobkit.get_nearby_player(self)
+				if target and mobkit.is_alive(target) and mobkit.is_in_deep(target) then
+					mobkit.clear_queue_high(self)
+					mobkit.hq_aqua_attack(self,20,target,6)
+				end
+			end
+		end
+	end
+	if mobkit.is_queue_empty_high(self) then mobkit.hq_aqua_roam(self,10,6) end
+end
 -- spawning is too specific to be included in the api, this is an example.
 -- a modder will want to refer to specific names according to games/mods they're using 
 -- in order for mobs not to spawn on treetops, certain biomes etc.
@@ -153,17 +174,28 @@ local function spawnstep(dtime)
 			pos2.y=pos2.y-5
 			local height, liquidflag = mobkit.get_terrain_height(pos2,32)
 	
-			if height and height >= 0 and not liquidflag -- and math.abs(height-pos2.y) <= 30 testin
-			and mobkit.nodeatpos({x=pos2.x,y=height-0.01,z=pos2.z}).is_ground_content then
+			if height and height >= 0 and
+			mobkit.nodeatpos({x=pos2.x,y=height-0.01,z=pos2.z}).is_ground_content then
 
 				local objs = minetest.get_objects_inside_radius(pos,abr*16+5)
 				local wcnt=0
 				local dcnt=0
-				for _,obj in ipairs(objs) do				-- count mobs in abrange
-					if not obj:is_player() then
-						local entity = obj:get_luaentity()
-						if entity and entity.name:find('zombiestrd:') then
-							chance=chance + (1-chance)*spawn_reduction	-- chance reduced for every mob in range
+				local mobname = 'zombiestrd:zombie'
+				if liquidflag then	-- sharks
+					mobname = 'zombiestrd:shark'
+					for _,obj in ipairs(objs) do
+						if not obj:is_player() then
+							local entity = obj:get_luaentity()
+							if entity and entity.name:find('zombiestrd:shark') then return end
+						end
+					end
+				else				--zombies
+					for _,obj in ipairs(objs) do				-- count mobs in abrange
+						if not obj:is_player() then
+							local entity = obj:get_luaentity()
+							if entity and entity.name:find('zombiestrd:') then
+								chance=chance + (1-chance)*spawn_reduction	-- chance reduced for every mob in range
+							end
 						end
 					end
 				end
@@ -173,14 +205,7 @@ local function spawnstep(dtime)
 					for _,obj in ipairs(objs) do				-- do not spawn if another player around
 						if obj:is_player() then return end
 					end
-					local obj=minetest.add_entity(pos2,'zombiestrd:zombie')			-- ok spawn it already damnit
---[[					local props = obj:get_properties()
-					if #props.textures > 1 then
---						local hp=obj:get_hp()			--wth?
-						props.textures[1]=props.textures[math.random(#props.textures)]
-						obj:set_properties(props) 
---						obj:set_hp(hp)					--wth?		
-					end					--]]
+					local obj=minetest.add_entity(pos2,mobname)			-- ok spawn it already damnit
 				end
 			end
 		end
@@ -230,13 +255,6 @@ minetest.register_entity("zombiestrd:zombie",{
 		walk={range={x=41,y=101},speed=40,loop=true},
 		stand={range={x=0,y=40},speed=1,loop=true},
 	},
-	-- animation = {
-		-- walk={
-			-- {range={x=41,y=101},speed=30,loop=true},
-			-- {range={x=41,y=101},speed=90,loop=true},
-			-- },
-		-- stand={range={x=0,y=40},speed=1,loop=true},
-	-- },
 	
 	sounds = {
 		misc='zombie',
@@ -288,4 +306,55 @@ minetest.register_entity("zombiestrd:zombie",{
 		end
 	end
 
+})
+
+minetest.register_entity("zombiestrd:shark",{
+											-- common props
+	physical = true,
+	stepheight = 0.1,				--EVIL!
+	collide_with_objects = true,
+	collisionbox = {-0.5, -0.3, -0.5, 0.5, 0.3, 0.5},
+	visual = "mesh",
+	mesh = "shark.b3d",
+	textures = {"shark3tex.png"},
+	visual_size = {x = 1.5, y = 1.5},
+	static_save = true,
+	makes_footstep_sound = true,
+	on_step = mobkit.stepfunc,	-- required
+	on_activate = mobkit.actfunc,		-- required
+	get_staticdata = mobkit.statfunc,
+											-- api props
+	springiness=0,
+	buoyancy = 0.98,					-- portion of hitbox submerged
+	max_speed = 5,
+	jump_height = 1.26,
+	view_range = 24,
+--	lung_capacity = 0, 		-- seconds
+	max_hp = 20,
+	timeout=600,
+	attack={range=0.8,damage_groups={fleshy=7}},
+	sounds = {
+		attack='sharkattack',
+		},
+	animation = {
+		def={range={x=1,y=59},speed=40,loop=true},	
+		fast={range={x=1,y=59},speed=80,loop=true},
+		back={range={x=15,y=1},speed=-15,loop=false},
+		},
+	
+	brainfunc = shark_brain,
+	
+	on_punch=function(self, puncher, time_from_last_punch, tool_capabilities, dir)
+		if mobkit.is_alive(self) then
+			local hvel = vector.multiply(vector.normalize({x=dir.x,y=0,z=dir.z}),4)
+			self.object:set_velocity({x=hvel.x,y=2,z=hvel.z})
+			
+			mobkit.hurt(self,tool_capabilities.damage_groups.fleshy or 1)
+
+			if type(puncher)=='userdata' and puncher:is_player() then	-- if hit by a player
+				mobkit.clear_queue_high(self)							-- abandon whatever they've been doing
+				mobkit.hq_aqua_attack(self,20,puncher,6)				-- get revenge
+			end
+		end
+	end,
 })
