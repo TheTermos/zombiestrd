@@ -1,5 +1,6 @@
 
 local abr = minetest.get_mapgen_setting('active_block_range')
+local nodename_water = minetest.registered_aliases.mapgen_water_source
 
 local zombiestrd = {}
 --zombiestrd.spawn_rate = 0.4		-- less is more
@@ -136,18 +137,16 @@ local function shark_brain(self)
 	end
 	
 	if mobkit.timer(self,1) then
-		if mobkit.timer(self,1) then
-			local prty = mobkit.get_queue_priority(self)
-			if prty < 20 then
-				local target = mobkit.get_nearby_player(self)
-				if target and mobkit.is_alive(target) and mobkit.is_in_deep(target) then
-					mobkit.clear_queue_high(self)
-					mobkit.hq_aqua_attack(self,20,target,6)
-				end
+		local prty = mobkit.get_queue_priority(self)
+		if prty < 20 then
+			local target = mobkit.get_nearby_player(self)
+			if target and mobkit.is_alive(target) and mobkit.is_in_deep(target) then
+				mobkit.clear_queue_high(self)
+				mobkit.hq_aqua_attack(self,20,target,7)
 			end
 		end
 	end
-	if mobkit.is_queue_empty_high(self) then mobkit.hq_aqua_roam(self,10,6) end
+	if mobkit.is_queue_empty_high(self) then mobkit.hq_aqua_roam(self,10,5) end
 end
 -- spawning is too specific to be included in the api, this is an example.
 -- a modder will want to refer to specific names according to games/mods they're using 
@@ -174,22 +173,30 @@ local function spawnstep(dtime)
 			pos2.y=pos2.y-5
 			local height, liquidflag = mobkit.get_terrain_height(pos2,32)
 	
-			if height and height >= 0 and
+			if height and --height >= 0 and
 			mobkit.nodeatpos({x=pos2.x,y=height-0.01,z=pos2.z}).is_ground_content then
 
 				local objs = minetest.get_objects_inside_radius(pos,abr*16+5)
 				local wcnt=0
 				local dcnt=0
 				local mobname = 'zombiestrd:zombie'
-				if liquidflag then	-- sharks
-					mobname = 'zombiestrd:shark'
-					for _,obj in ipairs(objs) do
-						if not obj:is_player() then
-							local entity = obj:get_luaentity()
-							if entity and entity.name:find('zombiestrd:shark') then return end
+				if liquidflag then		-- sharks
+					local spnode = mobkit.nodeatpos({x=pos2.x,y=height+0.01,z=pos2.z})
+					local spnode2 = mobkit.nodeatpos({x=pos2.x,y=height+1.01,z=pos2.z}) -- node above to make sure won't spawn in shallows
+					nodename_water = nodename_water or minetest.registered_aliases.mapgen_water_source
+					if spnode and spnode2 and spnode.name == nodename_water and spnode2.name == nodename_water then
+						for _,obj in ipairs(objs) do
+							if not obj:is_player() then
+								local entity = obj:get_luaentity()
+								if entity and entity.name=='zombiestrd:shark' then return end
+							end
 						end
+					mobname = 'zombiestrd:shark'
+					else
+						return
 					end
-				else				--zombies
+					
+				elseif height >= 0 then		--zombies
 					for _,obj in ipairs(objs) do				-- count mobs in abrange
 						if not obj:is_player() then
 							local entity = obj:get_luaentity()
@@ -358,3 +365,12 @@ minetest.register_entity("zombiestrd:shark",{
 		end
 	end,
 })
+
+--[[
+minetest.register_on_chat_message(
+	function(name, message)
+		if message == 'doit' then
+			minetest.chat_send_all(dump(minetest.registered_aliases.mapgen_water_source))
+		end
+	end
+)	--]]
