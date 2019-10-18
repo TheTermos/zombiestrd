@@ -140,7 +140,7 @@ local function shark_brain(self)
 		local prty = mobkit.get_queue_priority(self)
 		if prty < 20 then
 			local target = mobkit.get_nearby_player(self)
-			if target and mobkit.is_alive(target) and mobkit.is_in_deep(target) then
+			if target and mobkit.is_alive(target) and mobkit.is_in_deep(target) and target:get_attach() == nil then
 				mobkit.clear_queue_high(self)
 				mobkit.hq_aqua_attack(self,20,target,7)
 			end
