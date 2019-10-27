@@ -1,6 +1,7 @@
 
 local abr = minetest.get_mapgen_setting('active_block_range')
 local nodename_water = minetest.registered_aliases.mapgen_water_source
+local node_lava = nil
 
 local zombiestrd = {}
 --zombiestrd.spawn_rate = 0.4		-- less is more
@@ -52,18 +53,18 @@ local function hq_attracted(self,prty,tpos)
 end
 
 -- override built in behavior to increase idling time
-function mobkit.lq_idle(self,duration)
-	local init = true
-	local duration=random(10,20)
+
+function zombiestrd.hq_roam(self,prty)
 	local func=function(self)
-		if init then 
-			mobkit.animate(self,'stand') 
-			init=false
+		if mobkit.is_queue_empty_low(self) and self.isonground then
+			local pos = mobkit.get_stand_pos(self)
+			local neighbor = random(8)
+
+			local height, tpos, liquidflag = mobkit.is_neighbor_node_reachable(self,neighbor)
+			if height and not liquidflag then mobkit.dumbstep(self,height,tpos,0.3,20) end
 		end
-		duration = duration-self.dtime
-		if duration <= 0 then return true end
 	end
-	mobkit.queue_low(self,func)
+	mobkit.queue_high(self,func,prty)
 end
 
 local function alert(pos)
@@ -78,8 +79,23 @@ local function alert(pos)
 	end
 end
 
+
+local function lava_dmg(self,dmg)
+	node_lava = node_lava or minetest.registered_nodes[minetest.registered_aliases.mapgen_lava_source]
+	if node_lava then
+		local pos=self.object:get_pos()
+		local box = self.object:get_properties().collisionbox
+		local pos1={x=pos.x+box[1],y=pos.y+box[2],z=pos.z+box[3]}
+		local pos2={x=pos.x+box[4],y=pos.y+box[5],z=pos.z+box[6]}
+		local nodes=mobkit.get_nodes_in_area(pos1,pos2)
+		if nodes[node_lava] then mobkit.hurt(self,dmg) end
+	end
+end
+
 local function zombie_brain(self)
 	-- vitals should be checked every step
+	if mobkit.timer(self,1) then lava_dmg(self,6) end
+	
 	if self.hp <= 0 then	
 		mobkit.clear_queue_high(self)									-- cease all activity
 		mobkit.hq_die(self)												-- kick the bucket
@@ -124,12 +140,15 @@ local function zombie_brain(self)
 		end
 		
 		if mobkit.is_queue_empty_high(self) then
-			mobkit.hq_roam(self,0)
+			zombiestrd.hq_roam(self,0)
 		end
 	end
 end
 
 local function shark_brain(self)
+	if mobkit.timer(self,1) then lava_dmg(self,6) end
+	mobkit.vitals(self)
+	
 	if self.hp <= 0 then	
 		mobkit.clear_queue_high(self)
 		mobkit.hq_die(self)
