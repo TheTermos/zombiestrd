@@ -28,8 +28,9 @@ end
 -- find zombie's head center and radius
 local function get_head(luaent)
 	local pos = luaent.object:get_pos()
-	local off = luaent.collisionbox[6]
-	local y=pos.y+luaent.collisionbox[5]-off
+	local cbox = luaent.object:get_properties().collisionbox
+	local off = cbox[6]
+	local y=pos.y+cbox[5]-off
 	pos.y = y
 	return pos, off
 end
@@ -68,7 +69,7 @@ function zombiestrd.hq_roam(self,prty)
 end
 
 local function alert(pos)
-	objs = minetest.get_objects_inside_radius(pos,abr*16)
+	local objs = minetest.get_objects_inside_radius(pos,abr*16)
 	for _,obj in ipairs(objs) do
 		if not obj:is_player() then
 			local luaent = obj:get_luaentity()
@@ -147,7 +148,7 @@ end
 
 local function shark_brain(self)
 	if mobkit.timer(self,1) then lava_dmg(self,6) end
-	mobkit.vitals(self)
+--	mobkit.vitals(self)
 	
 	if self.hp <= 0 then	
 		mobkit.clear_queue_high(self)
@@ -255,6 +256,7 @@ minetest.register_on_punchnode(
 
 minetest.register_entity("zombiestrd:zombie",{
 											-- common props
+initial_properties = {											
 	physical = true,
 	stepheight = 0.1,			
 	collide_with_objects = true,
@@ -264,10 +266,13 @@ minetest.register_entity("zombiestrd:zombie",{
 	textures = {"mobs_zombie.png","mobs_zombi2.png"},
 	visual_size = {x = 1, y = 1},
 	static_save = true,
-	timeout = 600,
+	},
+	
 	on_step = mobkit.stepfunc,	-- required
 	on_activate = mobkit.actfunc,		-- required
 	get_staticdata = mobkit.statfunc,
+	
+	timeout = 600,
 											-- api props
 	springiness=0,
 	buoyancy = 0.75,					-- portion of hitbox submerged
